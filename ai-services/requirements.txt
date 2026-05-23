@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+openai
+langchain
+langgraph
+pinecone-client
+redis
+pydantic
