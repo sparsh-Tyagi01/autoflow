@@ -6,3 +6,4 @@ langgraph
 pinecone-client
 redis
 pydantic
+python-dotenv
