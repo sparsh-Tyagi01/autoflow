@@ -1,0 +1,91 @@
+'use client'
+
+import { useState } from 'react'
+
+import { useRouter } from 'next/navigation'
+
+import { api } from '@/lib/axios'
+
+export default function RegisterPage() {
+  const router = useRouter()
+
+  const [name, setName] = useState('')
+
+  const [email, setEmail] = useState('')
+
+  const [password, setPassword] =
+    useState('')
+
+  const [loading, setLoading] =
+    useState(false)
+
+  const register = async () => {
+    try {
+      setLoading(true)
+
+      await api.post('/auth/register', {
+        name,
+        email,
+        password,
+      })
+
+      router.push('/login')
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <div className="w-full max-w-md rounded-2xl border p-8">
+        <h1 className="mb-6 text-3xl font-bold">
+          Register
+        </h1>
+
+        <div className="space-y-4">
+          <input
+            type="text"
+            placeholder="Name"
+            className="w-full rounded-xl border p-3"
+            value={name}
+            onChange={(e) =>
+              setName(e.target.value)
+            }
+          />
+
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full rounded-xl border p-3"
+            value={email}
+            onChange={(e) =>
+              setEmail(e.target.value)
+            }
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full rounded-xl border p-3"
+            value={password}
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
+          />
+
+          <button
+            onClick={register}
+            disabled={loading}
+            className="w-full rounded-xl bg-black p-3 text-white"
+          >
+            {loading
+              ? 'Loading...'
+              : 'Register'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
