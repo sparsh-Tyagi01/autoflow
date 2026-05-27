@@ -10,24 +10,28 @@ client = AsyncOpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
-async def generate_response(
+async def stream_response(
     message: str
 ):
-    completion = await client.chat.completions.create(
+    stream = await client.chat.completions.create(
         model="gpt-4.1-mini",
         messages=[
             {
                 "role": "system",
                 "content": """
                 You are an enterprise AI assistant.
-                Help users professionally.
                 """
             },
             {
                 "role": "user",
                 "content": message
             }
-        ]
+        ],
+        stream=True
     )
 
-    return completion.choices[0].message.content
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+
+        if delta:
+            yield delta

@@ -2,8 +2,6 @@
 
 import { useEffect, useRef } from 'react'
 
-import { api } from '@/lib/axios'
-
 import {
   Message,
   useChatStore,
@@ -29,7 +27,7 @@ export default function ChatWindow() {
     bottomRef.current?.scrollIntoView({
       behavior: 'smooth',
     })
-  }, [messages, loading])
+  }, [messages])
 
   const sendMessage = async (
     content: string
@@ -43,21 +41,65 @@ export default function ChatWindow() {
 
     addMessage(userMessage)
 
+    setLoading(true)
+
+    const assistantId =
+      crypto.randomUUID()
+
+    addMessage({
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      createdAt: new Date().toISOString(),
+    })
+
     try {
-      setLoading(true)
+      const response = await fetch(
+        'http://localhost:8080/api/chat',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            message: content,
+          }),
+        }
+      )
 
-      const response = await api.post('/chat', {
-        message: content,
-      })
+      const reader =
+        response.body?.getReader()
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response.data.response,
-        createdAt: new Date().toISOString(),
+      const decoder = new TextDecoder()
+
+      let fullText = ''
+
+      while (true) {
+        const { done, value } =
+          await reader!.read()
+
+        if (done) break
+
+        const chunk =
+          decoder.decode(value)
+
+        fullText += chunk
+
+        useChatStore.setState(
+          (state) => ({
+            messages:
+              state.messages.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      content: fullText,
+                    }
+                  : msg
+              ),
+          })
+        )
       }
-
-      addMessage(assistantMessage)
     } catch (error) {
       console.error(error)
     } finally {

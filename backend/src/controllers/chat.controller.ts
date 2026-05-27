@@ -9,22 +9,26 @@ export async function chat(
   try {
     const { message } = req.body
 
-    const response = await axios.post(
-      `${process.env.AI_SERVICE_URL}/chat`,
-      {
+    const response = await axios({
+      method: 'post',
+      url: `${process.env.AI_SERVICE_URL}/chat`,
+      data: {
         message,
-      }
+      },
+      responseType: 'stream',
+    })
+
+    res.setHeader(
+      'Content-Type',
+      'text/plain'
     )
 
-    return res.json({
-      response:
-        response.data.response,
-    })
+    response.data.pipe(res)
   } catch (error) {
     console.error(error)
 
     return res.status(500).json({
-      message: 'AI service error',
+      message: 'Streaming error',
     })
   }
 }

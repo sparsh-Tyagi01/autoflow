@@ -7,3 +7,5 @@ pinecone-client
 redis
 pydantic
 python-dotenv
+sse-starlette
+google-generativeai
