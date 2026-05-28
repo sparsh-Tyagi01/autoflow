@@ -1,35 +1,32 @@
 import os
 
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 load_dotenv()
 
-genai.configure(
+client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
-
-model = genai.GenerativeModel("gemini-2.5-flash")
 
 async def stream_response(
     message: str
 ):
-    response = model.generate_content(
-        [
+    response = client.models.generate_content_stream(
+        model="gemini-2.5-flash",
+        contents=[
             {
                 "role": "user",
                 "parts": [
                     {
-                        "text": f"""
-                        You are an enterprise AI assistant.
-
-                        User: {message}
-                        """
+                        "text": (
+                            "You are an enterprise AI assistant.\n\n"
+                            f"User: {message}"
+                        )
                     }
-                ]
+                ],
             }
         ],
-        stream=True
     )
 
     for chunk in response:
