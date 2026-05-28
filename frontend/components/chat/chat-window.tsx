@@ -7,6 +7,8 @@ import {
   useChatStore,
 } from '@/store/chat-store'
 
+import { api } from '@/lib/axios'
+
 import MessageBubble from './message-bubble'
 import ChatInput from './chat-input'
 import TypingLoader from './typing-loader'
@@ -15,6 +17,8 @@ export default function ChatWindow() {
   const {
     messages,
     addMessage,
+    currentConversationId,
+    setMessages,
     loading,
     setLoading,
   } = useChatStore()
@@ -29,9 +33,29 @@ export default function ChatWindow() {
     })
   }, [messages])
 
+  useEffect(() => {
+    if (!currentConversationId)
+      return
+
+    fetchMessages()
+  }, [currentConversationId])
+
+  const fetchMessages =
+    async () => {
+      const response =
+        await api.get(
+          `/conversations/${currentConversationId}/messages`
+        )
+
+      setMessages(response.data)
+    }
+
   const sendMessage = async (
     content: string
   ) => {
+    if (!currentConversationId)
+      return
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -54,22 +78,22 @@ export default function ChatWindow() {
     })
 
     try {
-      const response = await fetch(
-        'http://localhost:8080/api/chat',
+  const response = await api.post(
+        '/chat',
         {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            message: content,
-          }),
+          message: content,
+          conversationId:
+            currentConversationId,
+        },
+        {
+          responseType: 'stream',
         }
       )
 
       const reader =
-        response.body?.getReader()
+        response.data?.getReader()
+
+      if (!reader) return
 
       const decoder = new TextDecoder()
 
@@ -77,7 +101,7 @@ export default function ChatWindow() {
 
       while (true) {
         const { done, value } =
-          await reader!.read()
+          await reader.read()
 
         if (done) break
 

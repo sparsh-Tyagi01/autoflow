@@ -7,29 +7,82 @@ export interface Message {
   createdAt: string
 }
 
-interface ChatStore {
-  messages: Message[]
-  loading: boolean
-
-  addMessage: (message: Message) => void
-  setLoading: (loading: boolean) => void
-  clearMessages: () => void
+interface Conversation {
+  _id: string
+  title: string
 }
 
-export const useChatStore = create<ChatStore>(
-  (set) => ({
+interface ChatStore {
+  messages: Message[]
+
+  conversations: Conversation[]
+
+  currentConversationId:
+    | string
+    | null
+
+  loading: boolean
+
+  setMessages: (
+    messages: Message[]
+  ) => void
+
+  addMessage: (
+    message: Message
+  ) => void
+
+  setConversations: (
+    conversations: Conversation[]
+  ) => void
+
+  setCurrentConversation: (
+    id: string
+  ) => void
+
+  setLoading: (
+    loading: boolean
+  ) => void
+}
+
+export const useChatStore =
+  create<ChatStore>((set) => ({
     messages: [],
+
+    conversations: [],
+
+    currentConversationId: null,
+
     loading: false,
+
+    setMessages: (messages) =>
+      set({
+        messages,
+      }),
 
     addMessage: (message) =>
       set((state) => ({
-        messages: [...state.messages, message],
+        messages: [
+          ...state.messages,
+          message,
+        ],
       })),
 
-    setLoading: (loading) =>
-      set({ loading }),
+    setConversations: (
+      conversations
+    ) =>
+      set({
+        conversations,
+      }),
 
-    clearMessages: () =>
-      set({ messages: [] }),
-  })
-)
+    setCurrentConversation: (
+      id
+    ) =>
+      set({
+        currentConversationId: id,
+      }),
+
+    setLoading: (loading) =>
+      set({
+        loading,
+      }),
+  }))

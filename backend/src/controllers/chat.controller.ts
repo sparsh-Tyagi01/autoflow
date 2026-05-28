@@ -2,12 +2,25 @@ import { Request, Response } from 'express'
 
 import axios from 'axios'
 
+import { Message } from '../models/message.model'
+
+import { Conversation } from '../models/conversation.model'
+
 export async function chat(
   req: Request,
   res: Response
 ) {
   try {
-    const { message } = req.body
+    const {
+      message,
+      conversationId,
+    } = req.body
+
+    await Message.create({
+      conversation: conversationId,
+      role: 'user',
+      content: message,
+    })
 
     const response = await axios({
       method: 'post',
@@ -18,17 +31,43 @@ export async function chat(
       responseType: 'stream',
     })
 
-    res.setHeader(
-      'Content-Type',
-      'text/plain'
+    let assistantText = ''
+
+    response.data.on(
+      'data',
+      async (chunk: Buffer) => {
+        const text = chunk.toString()
+
+        assistantText += text
+
+        res.write(text)
+      }
     )
 
-    response.data.pipe(res)
+    response.data.on(
+      'end',
+      async () => {
+        await Message.create({
+          conversation: conversationId,
+          role: 'assistant',
+          content: assistantText,
+        })
+
+        await Conversation.findByIdAndUpdate(
+          conversationId,
+          {
+            updatedAt: new Date(),
+          }
+        )
+
+        res.end()
+      }
+    )
   } catch (error) {
     console.error(error)
 
     return res.status(500).json({
-      message: 'Streaming error',
+      message: 'Chat error',
     })
   }
 }
