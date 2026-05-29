@@ -21,3 +21,7 @@ torch==2.2.2
 transformers<5
 sentence-transformers<3
 tavily-python
+playwright
+aiosmtplib
+requests
+pymongo
