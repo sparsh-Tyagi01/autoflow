@@ -14,7 +14,9 @@ from langchain_google_genai import (
 )
 
 from langchain_core.messages import (
-    HumanMessage
+    HumanMessage,
+    AIMessage,
+    SystemMessage
 )
 
 from app.agents.tools.tool_registry import (
@@ -24,6 +26,29 @@ from app.agents.tools.tool_registry import (
 from app.agents.state.agent_state import (
     AgentState
 )
+
+from app.memory.conversation_memory import (
+    load_memory,
+    save_message
+)
+
+def _normalize_content_to_text(
+    content
+) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                parts.append(str(part["text"]))
+            else:
+                parts.append(str(part))
+        return "".join(parts).strip()
+    return str(content)
+
 
 # Gemini LLM
 llm = ChatGoogleGenerativeAI(
@@ -99,17 +124,80 @@ agent = graph.compile()
 
 # Run agent
 async def run_agent(
-    user_input: str
+    user_input: str,
+    conversation_id: str
 ):
+
+    previous_messages = (
+        await load_memory(
+            conversation_id
+        )
+    )
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a helpful assistant. Use the conversation history "
+                "to answer questions about previously shared facts."
+            )
+        )
+    ]
+
+    for msg in previous_messages:
+
+        if msg["role"] == "user":
+
+            messages.append(
+                HumanMessage(
+                    content=
+                    _normalize_content_to_text(
+                        msg["content"]
+                    )
+                )
+            )
+
+        elif (
+            msg["role"]
+            == "assistant"
+        ):
+
+            messages.append(
+                AIMessage(
+                    content=
+                    _normalize_content_to_text(
+                        msg["content"]
+                    )
+                )
+            )
+
+    messages.append(
+        HumanMessage(
+            content=user_input
+        )
+    )
 
     result = await agent.ainvoke(
         {
-            "messages": [
-                HumanMessage(
-                    content=user_input
-                )
-            ]
+            "messages": messages
         }
     )
 
-    return result["messages"][-1].content
+    final_response = (
+        _normalize_content_to_text(
+            result["messages"][-1].content
+        )
+    )
+
+    await save_message(
+        conversation_id,
+        "user",
+        user_input
+    )
+
+    await save_message(
+        conversation_id,
+        "assistant",
+        final_response
+    )
+
+    return final_response
