@@ -1,0 +1,69 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: autoflow-mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: autoflow-redis
+    ports:
+      - '6379:6379'
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autoflow-backend
+    ports:
+      - '8080:8080'
+    env_file:
+      - ./backend/.env
+    environment:
+      - PORT=8080
+      - MONGO_URI=mongodb://mongodb:27017/autoflow
+      - CLIENT_URL=http://localhost:3000
+      - AI_SERVICE_URL=http://ai-services:8000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+  ai-services:
+    build:
+      context: ./ai-services
+      dockerfile: Dockerfile
+    container_name: autoflow-ai
+    ports:
+      - '8000:8000'
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/autoflow
+      - CLIENT_URL=http://localhost:3000
+    env_file:
+      - ./ai-services/.env
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: autoflow-frontend
+    ports:
+      - '3000:3000'
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
