@@ -15,28 +15,38 @@ from langchain_google_genai import (
 
 from langchain_core.messages import (
     HumanMessage,
-    AIMessage,
     SystemMessage
 )
 
 from app.agents.tools.tool_registry import (
-    TOOLS
+    TOOLS,
+    get_tools_by_name,
 )
 
 from app.agents.state.agent_state import (
     AgentState
 )
 
+from app.memory.checkpointer import (
+    memory
+)
+
 from app.memory.conversation_memory import (
-    load_memory,
     save_message
 )
 
-def _normalize_content_to_text(
-    content
-) -> str:
+from app.agents.prompts.system_prompt import (
+    SYSTEM_PROMPT
+)
+from app.core.config import (
+    settings
+)
+
+
+def normalize_content(content) -> str:
     if isinstance(content, str):
         return content
+
     if isinstance(content, list):
         parts = []
         for part in content:
@@ -46,158 +56,200 @@ def _normalize_content_to_text(
                 parts.append(str(part["text"]))
             else:
                 parts.append(str(part))
-        return "".join(parts).strip()
+        return "".join(parts)
+
     return str(content)
 
 
-# Gemini LLM
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=os.getenv(
-        "GOOGLE_API_KEY"
-    ),
-    temperature=0
-)
+from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import AIMessage
 
-# Bind tools
-llm_with_tools = llm.bind_tools(
-    TOOLS
-)
-
-# Chatbot node
-async def chatbot(
-    state: AgentState
+def build_agent(
+    model_name: str = "gemini-2.5-flash-lite",
+    temperature: float = 0,
+    tool_names: list = None,
 ):
+    """Build a LangGraph agent with configurable model, temperature, and tools."""
 
-    response = await llm_with_tools.ainvoke(
-        state["messages"]
+    api_key = settings.GOOGLE_API_KEY or settings.GEMINI_API_KEY
+
+    llm = ChatGoogleGenerativeAI(
+        model=model_name,
+        google_api_key=api_key,
+        temperature=temperature,
     )
 
-    return {
-        "messages": [
-            response
-        ]
-    }
+    if tool_names:
+        selected_tools = get_tools_by_name(tool_names)
+    else:
+        selected_tools = TOOLS
 
-# Tool node
-tool_node = ToolNode(
-    TOOLS
-)
+    llm_with_tools = llm.bind_tools(selected_tools)
 
-# Create graph
-graph = StateGraph(
-    AgentState
-)
+    async def chatbot(state: AgentState, config: RunnableConfig):
+        full_message = None
+        async for chunk in llm_with_tools.astream(
+            state["messages"],
+            config=config,
+        ):
+            if full_message is None:
+                full_message = chunk
+            else:
+                full_message += chunk
+        
+        if full_message is None:
+            full_message = AIMessage(content="")
+            
+        return {"messages": [full_message]}
 
-graph.add_node(
-    "chatbot",
-    chatbot
-)
+    tool_node = ToolNode(selected_tools)
 
-graph.add_node(
-    "tools",
-    tool_node
-)
+    graph = StateGraph(AgentState)
 
-graph.set_entry_point(
-    "chatbot"
-)
+    graph.add_node("chatbot", chatbot)
+    graph.add_node("tools", tool_node)
+    graph.set_entry_point("chatbot")
 
-# Conditional routing
-graph.add_conditional_edges(
-    "chatbot",
+    graph.add_conditional_edges(
+        "chatbot",
+        lambda state:
+        "tools"
+        if state["messages"][-1].tool_calls
+        else END
+    )
 
-    lambda state:
-    "tools"
-    if state["messages"][-1].tool_calls
-    else END
-)
+    graph.add_edge("tools", "chatbot")
 
-# Loop back after tool execution
-graph.add_edge(
-    "tools",
-    "chatbot"
-)
+    return graph.compile(checkpointer=memory)
 
-# Compile graph
-agent = graph.compile()
 
-# Run agent
+# Default agent
+default_agent = build_agent()
+
+
 async def run_agent(
     user_input: str,
-    conversation_id: str
+    conversation_id: str,
+    agent_config: dict = None,
 ):
+    """Run the LangGraph agent with optional dynamic config."""
 
-    previous_messages = (
-        await load_memory(
-            conversation_id
+    # Retrieve relevant semantic memories from Pinecone
+    from app.memory.semantic_memory import retrieve_semantic_memory, save_semantic_memory
+    memories = await retrieve_semantic_memory(conversation_id, user_input)
+
+    if agent_config:
+        system_prompt = agent_config.get("system_prompt", SYSTEM_PROMPT)
+        model_name = agent_config.get("model", "gemini-2.5-flash-lite")
+        temperature = agent_config.get("temperature", 0)
+        tool_names = agent_config.get("tools", None)
+
+        agent = build_agent(
+            model_name=model_name,
+            temperature=temperature,
+            tool_names=tool_names if tool_names else None,
         )
-    )
+    else:
+        system_prompt = SYSTEM_PROMPT
+        agent = default_agent
 
-    messages = [
-        SystemMessage(
-            content=(
-                "You are a helpful assistant. Use the conversation history "
-                "to answer questions about previously shared facts."
-            )
-        )
-    ]
-
-    for msg in previous_messages:
-
-        if msg["role"] == "user":
-
-            messages.append(
-                HumanMessage(
-                    content=
-                    _normalize_content_to_text(
-                        msg["content"]
-                    )
-                )
-            )
-
-        elif (
-            msg["role"]
-            == "assistant"
-        ):
-
-            messages.append(
-                AIMessage(
-                    content=
-                    _normalize_content_to_text(
-                        msg["content"]
-                    )
-                )
-            )
-
-    messages.append(
-        HumanMessage(
-            content=user_input
-        )
-    )
+    # Inject semantic memory if present
+    if memories:
+        system_prompt = f"{system_prompt}\n\n[PAST MEMORIES / RELEVANT CONTEXT]\nUser facts & history summaries:\n{memories}"
 
     result = await agent.ainvoke(
         {
-            "messages": messages
-        }
+            "messages": [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_input),
+            ]
+        },
+        config={
+            "configurable": {
+                "thread_id": conversation_id
+            }
+        },
     )
 
-    final_response = (
-        _normalize_content_to_text(
-            result["messages"][-1].content
-        )
+    final_response = normalize_content(
+        result["messages"][-1].content
     )
 
     await save_message(
         conversation_id,
         "user",
-        user_input
+        user_input,
     )
 
     await save_message(
         conversation_id,
         "assistant",
-        final_response
+        final_response,
     )
 
+    # Process and save new conversation summaries to semantic memory
+    await save_semantic_memory(conversation_id)
+
     return final_response
+
+
+async def stream_agent(
+    user_input: str,
+    conversation_id: str,
+    agent_config: dict = None,
+):
+    """Stream the LangGraph agent response token by token."""
+
+    # Retrieve relevant semantic memories from Pinecone
+    from app.memory.semantic_memory import retrieve_semantic_memory, save_semantic_memory
+    memories = await retrieve_semantic_memory(conversation_id, user_input)
+
+    if agent_config:
+        system_prompt = agent_config.get("system_prompt", SYSTEM_PROMPT)
+        model_name = agent_config.get("model", "gemini-2.5-flash-lite")
+        temperature = agent_config.get("temperature", 0)
+        tool_names = agent_config.get("tools", None)
+
+        agent = build_agent(
+            model_name=model_name,
+            temperature=temperature,
+            tool_names=tool_names if tool_names else None,
+        )
+    else:
+        system_prompt = SYSTEM_PROMPT
+        agent = default_agent
+
+    # Inject semantic memory if present
+    if memories:
+        system_prompt = f"{system_prompt}\n\n[PAST MEMORIES / RELEVANT CONTEXT]\nUser facts & history summaries:\n{memories}"
+
+    full_response = ""
+
+    async for event in agent.astream_events(
+        {
+            "messages": [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_input),
+            ]
+        },
+        config={
+            "configurable": {
+                "thread_id": conversation_id
+            }
+        },
+        version="v2",
+    ):
+        kind = event.get("event")
+
+        if kind == "on_chat_model_stream":
+            content = event["data"]["chunk"].content
+            if content:
+                text = normalize_content(content)
+                full_response += text
+                yield text
+
+    await save_message(conversation_id, "user", user_input)
+    await save_message(conversation_id, "assistant", full_response)
+
+    # Process and save new conversation summaries to semantic memory
+    await save_semantic_memory(conversation_id)

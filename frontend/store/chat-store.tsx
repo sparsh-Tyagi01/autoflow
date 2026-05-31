@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 
 export interface Message {
-  id: string
+  id?: string
+  _id?: string
   role: 'user' | 'assistant'
   content: string
   createdAt: string

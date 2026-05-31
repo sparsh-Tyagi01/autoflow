@@ -1,50 +1,73 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
 
-from app.agents.orchestrator.langgraph_agent import run_agent as run_langgraph_agent
+from pydantic import BaseModel, Field
 
-from app.memory.conversation_memory import load_memory
+from typing import Optional, List
 
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
+from app.agents.orchestrator.langgraph_agent import (
+    run_agent,
+    stream_agent,
+)
 
 
 router = APIRouter()
 
+
+class AgentConfig(BaseModel):
+    name: str = "Default Agent"
+    system_prompt: str = "You are a helpful AI assistant."
+    model: str = "gemini-2.5-flash-lite"
+    temperature: float = 0.7
+    max_tokens: int = 4096
+    tools: Optional[List[str]] = None
+    memory_enabled: bool = True
+    rag_enabled: bool = False
+
+
 class AgentRequest(BaseModel):
     message: str
-    conversation_id: str
+    conversation_id: str = Field(default="default")
+    agent_config: Optional[AgentConfig] = None
+
 
 @router.post("/run")
-async def run_agent(
-    req: AgentRequest
-):
-    try:
-        response = await run_langgraph_agent(
-            req.message,
-            req.conversation_id
-        )
-    except ChatGoogleGenerativeAIError as exc:
-        if "RESOURCE_EXHAUSTED" in str(exc):
-            raise HTTPException(
-                status_code=429,
-                detail="Gemini API quota exceeded. Please retry shortly."
-            )
-        raise
+async def agent_run(request: AgentRequest):
+    """Run agent and return full response."""
 
-    return {
-        "response": response
-    }
+    config = None
+    if request.agent_config:
+        config = request.agent_config.model_dump()
 
-@router.get("/memory/{conversation_id}")
-async def get_memory(
-    conversation_id: str
-):
-    messages = await load_memory(
-        conversation_id
+    response = await run_agent(
+        request.message,
+        request.conversation_id,
+        agent_config=config,
     )
 
-    return {
-        "conversation_id": conversation_id,
-        "messages": messages
-    }
+    return {"response": response}
+
+
+@router.post("/stream")
+async def agent_stream(request: AgentRequest):
+    """Stream agent response via SSE."""
+
+    config = None
+    if request.agent_config:
+        config = request.agent_config.model_dump()
+
+    async def event_generator():
+        async for token in stream_agent(
+            request.message,
+            request.conversation_id,
+            agent_config=config,
+        ):
+            yield f"data: {token}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+    )

@@ -3,7 +3,7 @@ import mongoose from 'mongoose'
 const messageSchema =
   new mongoose.Schema(
     {
-      conversation: {
+      conversationId: {
         type:
           mongoose.Schema.Types.ObjectId,
         ref: 'Conversation',
@@ -12,8 +12,11 @@ const messageSchema =
 
       role: {
         type: String,
-        enum: ['user', 'assistant'],
-        required: true,
+        enum: [
+          'user',
+          'assistant',
+          'tool',
+        ],
       },
 
       content: {
@@ -26,7 +29,8 @@ const messageSchema =
     }
   )
 
-export const Message = mongoose.model(
-  'Message',
-  messageSchema
-)
+export const Message =
+  mongoose.model(
+    'Message',
+    messageSchema
+  )

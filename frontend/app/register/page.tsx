@@ -1,91 +1,157 @@
 'use client'
 
 import { useState } from 'react'
-
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { Sparkles, Eye, EyeOff, Loader2 } from 'lucide-react'
 
 import { api } from '@/lib/axios'
 
 export default function RegisterPage() {
   const router = useRouter()
-
   const [name, setName] = useState('')
-
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const [password, setPassword] =
-    useState('')
+  const register = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
 
-  const [loading, setLoading] =
-    useState(false)
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError('Please fill in all fields')
+      return
+    }
 
-  const register = async () => {
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+
     try {
       setLoading(true)
-
-      await api.post('/auth/register', {
-        name,
-        email,
-        password,
-      })
-
+      await api.post('/auth/register', { name, email, password })
       router.push('/login')
-    } catch (error) {
-      console.error(error)
+    } catch (err: any) {
+      setError(
+        err.response?.data?.message ||
+          err.response?.data?.errors?.[0] ||
+          'Registration failed. Please try again.'
+      )
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="w-full max-w-md rounded-2xl border p-8">
-        <h1 className="mb-6 text-3xl font-bold">
-          Register
-        </h1>
-
-        <div className="space-y-4">
-          <input
-            type="text"
-            placeholder="Name"
-            className="w-full rounded-xl border p-3"
-            value={name}
-            onChange={(e) =>
-              setName(e.target.value)
-            }
-          />
-
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full rounded-xl border p-3"
-            value={email}
-            onChange={(e) =>
-              setEmail(e.target.value)
-            }
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full rounded-xl border p-3"
-            value={password}
-            onChange={(e) =>
-              setPassword(e.target.value)
-            }
-          />
-
-          <button
-            onClick={register}
-            disabled={loading}
-            className="w-full rounded-xl bg-black p-3 text-white"
-          >
-            {loading
-              ? 'Loading...'
-              : 'Register'}
-          </button>
-        </div>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* Background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-fuchsia-500/10 blur-3xl" />
+        <div className="absolute bottom-0 -right-40 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl" />
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="relative z-10 w-full max-w-md px-6"
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-2 justify-center mb-8">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
+            <Sparkles className="h-5 w-5 text-white" />
+          </div>
+          <span className="text-2xl font-bold tracking-tight">AutoFlow</span>
+        </div>
+
+        <div className="rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm p-8">
+          <h1 className="text-2xl font-bold mb-1">Create your account</h1>
+          <p className="text-sm text-muted-foreground mb-6">
+            Start building AI agents in minutes
+          </p>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive"
+            >
+              {error}
+            </motion.div>
+          )}
+
+          <form onSubmit={register} className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Full Name</label>
+              <input
+                type="text"
+                placeholder="John Doe"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Email</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Must be at least 6 characters
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 text-white font-medium hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? 'Creating account...' : 'Create Account'}
+            </button>
+          </form>
+
+          <p className="text-sm text-muted-foreground text-center mt-6">
+            Already have an account?{' '}
+            <Link href="/login" className="text-violet-500 hover:underline font-medium">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </motion.div>
     </div>
   )
 }

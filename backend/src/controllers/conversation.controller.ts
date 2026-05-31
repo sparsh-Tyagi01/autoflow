@@ -6,26 +6,23 @@ import { Message } from '../models/message.model'
 
 import { AuthRequest } from '../middleware/auth.middleware'
 
+import crypto from 'crypto'
+
 export async function createConversation(
   req: AuthRequest,
   res: Response
 ) {
-  try {
-    const conversation =
-      await Conversation.create({
-        user: req.userId,
-      })
+  const conversation =
+    await Conversation.create({
+      userId: req.userId,
 
-    return res.status(201).json(
-      conversation
-    )
-  } catch (error) {
-    console.error(error)
-
-    return res.status(500).json({
-      message: 'Server error',
+      threadId:
+        crypto.randomUUID(),
     })
-  }
+
+  return res.json(
+    conversation
+  )
 }
 
 export async function getConversations(
@@ -35,7 +32,7 @@ export async function getConversations(
   try {
     const conversations =
       await Conversation.find({
-        user: req.userId,
+        userId: req.userId,
       }).sort({
         updatedAt: -1,
       })
@@ -50,17 +47,33 @@ export async function getConversations(
   }
 }
 
+import { getCache, setCache } from '../database/redis'
+
 export async function getMessages(
   req: AuthRequest,
   res: Response
 ) {
+  const { conversationId } = req.params
+  const cacheKey = `messages:${conversationId}`
+
   try {
+    // 1. Try reading from Redis Cache
+    const cachedMessages = await getCache(cacheKey)
+    if (cachedMessages) {
+      console.log(`[Cache Hit] Messages for conversation: ${conversationId}`)
+      return res.json(JSON.parse(cachedMessages))
+    }
+
+    // 2. Fallback to MongoDB
+    console.log(`[Cache Miss] Fetching messages from MongoDB for conversation: ${conversationId}`)
     const messages = await Message.find({
-      conversation:
-        req.params.conversationId,
+      conversationId,
     }).sort({
       createdAt: 1,
     })
+
+    // 3. Cache results for 30 minutes (1800 seconds)
+    await setCache(cacheKey, JSON.stringify(messages), 1800)
 
     return res.json(messages)
   } catch (error) {

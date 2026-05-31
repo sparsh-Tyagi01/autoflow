@@ -4,6 +4,7 @@ import {
   register,
   login,
   logout,
+  getMe,
 } from '../controllers/auth.controller'
 
 import { protect } from '../middleware/auth.middleware'
@@ -16,14 +17,6 @@ router.post('/login', login)
 
 router.post('/logout', logout)
 
-router.get(
-  '/me',
-  protect,
-  async (req, res) => {
-    res.json({
-      user: true,
-    })
-  }
-)
+router.get('/me', protect, getMe)
 
 export default router

@@ -24,6 +24,10 @@ from app.agents.tools.database_tool import (
     database_tool
 )
 
+from app.agents.tools.rag_tool import (
+    rag_tool
+)
+
 @tool
 async def browser(url: str):
     """
@@ -80,11 +84,41 @@ def database(collection: str):
 
     return database_tool(collection)
 
+@tool
+def rag_search(
+    query: str
+):
+    """
+    Search uploaded PDFs and vector database.
+    """
+
+    return rag_tool(query)
+
 TOOLS = [
     browser,
     send_email,
     github,
     calculator,
     read_file,
-    database
+    database,
+    rag_search
 ]
+
+TOOL_MAP = {
+    "browser": browser,
+    "send_email": send_email,
+    "github": github,
+    "calculator": calculator,
+    "read_file": read_file,
+    "database": database,
+    "rag_search": rag_search,
+}
+
+
+def get_tools_by_name(names: list):
+    """Return a list of tool objects from a list of tool name strings."""
+    selected = []
+    for name in names:
+        if name in TOOL_MAP:
+            selected.append(TOOL_MAP[name])
+    return selected if selected else TOOLS

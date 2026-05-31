@@ -1,12 +1,13 @@
 fastapi
 uvicorn
-openai
 langchain
 langchain-chroma
 langchain-community
 langchain-google-genai
 langchain-huggingface
+langchain-pinecone
 langgraph
+langgraph-checkpoint
 pinecone-client
 redis
 pydantic

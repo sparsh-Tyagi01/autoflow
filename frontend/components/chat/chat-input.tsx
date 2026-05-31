@@ -25,6 +25,13 @@ export default function ChatInput({
     setMessage('')
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
   return (
     <div className="flex gap-2">
       <Textarea
@@ -32,6 +39,7 @@ export default function ChatInput({
         onChange={(e) =>
           setMessage(e.target.value)
         }
+        onKeyDown={handleKeyDown}
         placeholder="Message your AI agent..."
         className="min-h-[60px]"
       />

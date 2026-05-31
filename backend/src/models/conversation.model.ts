@@ -3,7 +3,7 @@ import mongoose from 'mongoose'
 const conversationSchema =
   new mongoose.Schema(
     {
-      user: {
+      userId: {
         type:
           mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -13,6 +13,11 @@ const conversationSchema =
       title: {
         type: String,
         default: 'New Chat',
+      },
+
+      threadId: {
+        type: String,
+        required: true,
       },
     },
     {
